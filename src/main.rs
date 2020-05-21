@@ -125,7 +125,7 @@ impl App {
         let keyring = Keyring::new("octopat", alias.as_ref());
         let app = match keyring
             .get_password()
-            .map_err(anyhow::Error::from)
+            .map_err(|e| anyhow::anyhow!(e))
             .and_then(|value| serde_json::from_str(&value).map_err(anyhow::Error::from))
         {
             Ok(app) => app,
@@ -142,7 +142,9 @@ impl App {
                     client_id,
                     client_secret,
                 };
-                keyring.set_password(&serde_json::to_string(&app)?)?;
+                keyring
+                    .set_password(&serde_json::to_string(&app)?)
+                    .map_err(|e| anyhow::anyhow!(e))?;
                 app
             }
         };
