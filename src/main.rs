@@ -204,7 +204,7 @@ fn authorization_url(
 }
 
 async fn exchange_token(
-    app: App,
+    app: &App,
     code: impl AsRef<str>,
 ) -> Result<AccessTokenResponse, reqwest::Error> {
     let App {
@@ -276,7 +276,7 @@ async fn create(
                                 match params.get("code") {
                                     Some(code) => {
                                         let AccessTokenResponse { access_token } =
-                                            exchange_token(app, code).await?;
+                                            exchange_token(&app, code).await?;
                                         let mut clip: ClipboardContext = ClipboardProvider::new()
                                             .expect("failed to get access to clipboard");
                                         clip.set_contents(access_token)
@@ -288,7 +288,10 @@ async fn create(
                                             hyper::Response::builder()
                                                 .status(hyper::StatusCode::OK)
                                                 .body(hyper::Body::from(
-                                                    "Octopat says you can close this browser tab",
+                                                    format!(
+                                                        "<p>Octopat says you can close this browser tab</p><p>You can revoke this access at any time by visiting your <a href=\"https://github.com/settings/connections/applications/{client_id}\">application authorizations</a></p>",
+                                                        client_id = &app.client_id
+                                                    ),
                                                 ))?,
                                         )
                                     }
