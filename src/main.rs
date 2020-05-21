@@ -163,8 +163,12 @@ impl App {
         alias: impl AsRef<str>,
     ) -> Result<App, anyhow::Error> {
         let keyring = Keyring::new("octopat", alias.as_ref());
-        let app = match keyring.get_password() {
-            Ok(value) => serde_json::from_str(&value)?,
+        let app = match keyring
+            .get_password()
+            .map_err(anyhow::Error::from)
+            .and_then(|value| serde_json::from_str(&value).map_err(anyhow::Error::from))
+        {
+            Ok(app) => app,
             _ => {
                 println!("We'll need some credentials from a GitHub app to fetch a new token");
                 println!("Visit https://github.com/settings/developers to find them or create a new application");
@@ -233,6 +237,7 @@ async fn create(
         .with_prompt("Select Permission scopes")
         .items(&selections[..])
         .defaults(defaults)
+        .paged(true)
         .interact()?
         .into_iter()
         .fold(Vec::new(), |mut res, index| {
@@ -283,7 +288,7 @@ async fn create(
                                             hyper::Response::builder()
                                                 .status(hyper::StatusCode::OK)
                                                 .body(hyper::Body::from(
-                                                    "Octopat says can close this browser tab",
+                                                    "Octopat says you can close this browser tab",
                                                 ))?,
                                         )
                                     }
