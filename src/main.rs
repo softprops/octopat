@@ -4,25 +4,28 @@ use dialoguer::{
     theme::{ColorfulTheme, Theme},
     Input, MultiSelect, Password,
 };
+use enum_iterator::IntoEnumIterator;
+use hyper::service::{make_service_fn, service_fn};
 use keyring::Keyring;
-use reqwest::{header::HeaderMap, Client};
+use reqwest::Client;
 use serde::{Deserialize, Serialize};
-use std::{error, fmt, string};
+use std::{collections::HashMap, error, fmt};
 use structopt::StructOpt;
 use tokio::sync::broadcast;
 
-#[derive(StructOpt)]
 /// An interactive GitHub personal access token command line dispenser ✨
+#[derive(StructOpt)]
 pub enum Opts {
     /// Create a new token
-    Create,
-    /// Lists current tokens
-    List,
-    /// Delete tokens
-    Delete,
+    Create {
+        /// An optional port to listen for responses from GitHub on (defaults to 4567)
+        #[structopt(long, short)]
+        port: Option<u16>,
+        /// Alias for name of GitHub app to store on keychain (defaults to "default")
+        #[structopt(long, short)]
+        alias: Option<String>,
+    },
 }
-
-use enum_iterator::IntoEnumIterator;
 
 #[derive(Clone, Deserialize, Serialize, Copy, IntoEnumIterator)]
 pub enum Scope {
@@ -97,7 +100,11 @@ impl fmt::Debug for Scope {
         &self,
         f: &mut fmt::Formatter<'_>,
     ) -> fmt::Result {
-        f.write_str(serde_json::to_string(&self).unwrap().as_str())
+        f.write_str(
+            serde_json::to_string(&self)
+                .expect("failed to serialize scope to a string")
+                .as_str(),
+        )
     }
 }
 
@@ -106,42 +113,18 @@ impl fmt::Display for Scope {
         &self,
         f: &mut fmt::Formatter<'_>,
     ) -> fmt::Result {
-        f.write_str(serde_json::to_string(&self).unwrap().replace("\"","").as_str())
+        f.write_str(
+            serde_json::to_string(&self)
+                .expect("failed to serialize scope to a string")
+                .replace("\"", "")
+                .as_str(),
+        )
     }
-}
-
-#[derive(Serialize)]
-struct AuthRequest {
-    note: String,
-    scopes: Option<Vec<Scope>>,
-}
-
-#[derive(Deserialize)]
-struct AuthResponse {
-    token: String,
 }
 
 #[derive(Deserialize)]
 struct AccessTokenResponse {
     access_token: String,
-}
-
-#[derive(Deserialize, Clone)]
-struct Authorization {
-    id: usize,
-    scopes: Vec<Scope>,
-    note: Option<String>,
-    token_last_eight: Option<String>,
-}
-
-impl string::ToString for Authorization {
-    fn to_string(&self) -> String {
-        format!(
-            "{} {:?}",
-            self.note.clone().unwrap_or("???".into()),
-            self.scopes
-        )
-    }
 }
 
 #[derive(Debug)]
@@ -156,121 +139,94 @@ impl fmt::Display for StrErr {
     }
 }
 
-#[derive(Debug)] // todo: custom masking debug impl
+#[derive(Clone, Serialize, Deserialize)]
 struct App {
     client_id: String,
     client_secret: String,
 }
 
+impl fmt::Debug for App {
+    fn fmt(
+        &self,
+        f: &mut fmt::Formatter<'_>,
+    ) -> fmt::Result {
+        f.debug_struct("App")
+            .field("client_id", &self.client_id)
+            .field("client_secret", &"*".repeat(self.client_secret.len()))
+            .finish()
+    }
+}
+
 impl App {
-    fn prompt(theme: &dyn Theme) -> Result<App, Box<dyn std::error::Error>> {
-        let keyring = Keyring::new("octopat", "default");
+    fn prompt(
+        theme: &dyn Theme,
+        alias: impl AsRef<str>,
+    ) -> Result<App, anyhow::Error> {
+        let keyring = Keyring::new("octopat", alias.as_ref());
         let app = match keyring.get_password() {
-            Ok(value) => match &value.split(':').collect::<Vec<_>>()[..] {
-                [client_id, client_secret] => App {
-                    client_id: client_id.to_string(),
-                    client_secret: client_secret.to_string(),
-                },
-                _ => panic!("didn't expect to find this in there"),
-            },
+            Ok(value) => serde_json::from_str(&value)?,
             _ => {
-                println!("We'll need some credentials from a GitHub app to fetch a new token. Visit https://github.com/settings/developers to find them");
+                println!("We'll need some credentials from a GitHub app to fetch a new token");
+                println!("Visit https://github.com/settings/developers to find them or create a new application");
                 let client_id: String = Input::with_theme(theme)
                     .with_prompt("Your client id")
                     .interact()?;
                 let client_secret: String = Password::with_theme(theme)
                     .with_prompt("Your client secret")
                     .interact()?;
-                keyring.set_password(format!("{}:{}", client_id, client_secret).as_str())?;
-                App {
+                let app = App {
                     client_id,
                     client_secret,
-                }
+                };
+                keyring.set_password(&serde_json::to_string(&app)?)?;
+                app
             }
         };
         Ok(app)
     }
 }
 
-struct Credentials {
-    login: String,
-    password: String,
-    otp: Option<String>,
+fn authorization_url(
+    client_id: impl AsRef<str>,
+    scopes: Vec<Scope>,
+    port: u16,
+) -> String {
+    format!(
+        "https://github.com/login/oauth/authorize?client_id={client_id}&redirect_uri=http://localhost:{port}/&scope={scope}",
+        client_id = client_id.as_ref(),
+        scope = scopes.into_iter().map(|s| s.to_string()).collect::<Vec<_>>().join("%20"),
+        port = port
+    )
 }
 
-impl Credentials {
-    fn prompt(theme: &dyn Theme) -> std::io::Result<Self> {
-        let login: String = Input::with_theme(theme)
-            .with_prompt("Your GitHub login")
-            .interact()?;
-        let password: String = Password::with_theme(theme)
-            .with_prompt("Your GitHub password")
-            .interact()?;
-        let otp: Option<String> = match Input::with_theme(theme)
-            .with_prompt("Your GitHub OTP (optional)")
-            .default("-".to_string())
-            .show_default(false)
-            .interact()?
-            .as_str()
-        {
-            "-" => None,
-            other => Some(other.to_string()),
-        };
-        Ok(Credentials {
-            login,
-            password,
-            otp,
-        })
-    }
-}
-
-fn request(
-    method: reqwest::Method,
-    url: &str,
-    credentials: Credentials,
-) -> Result<reqwest::RequestBuilder, Box<dyn error::Error>> {
-    let Credentials {
-        login,
-        password,
-        otp,
-    } = credentials;
-    let mut headers = HeaderMap::new();
-    headers.append(
-        "User-Agent",
-        format!("octopat/{}", env!("CARGO_PKG_VERSION")).parse()?,
-    );
-    headers.append("Content-Type", "application/json".parse()?);
-    if let Some(otp) = otp {
-        headers.append("X-GitHub-OTP", otp.parse()?);
-    }
-    Ok(Client::new()
-        .request(method, url)
-        .headers(headers)
-        .basic_auth(login, Some(password)))
-}
-
-// trait QueryParams {
-//     fn query_params(&self) -> HashMap<String, String>;
-// }
-
-// impl <T> QueryParams for hyper::request::Request<T> {
-//     fn query_params(&self) -> HashMap<String, String> {
-//         req.uri()
-//             .query()
-//             .map(|v| {
-//                 url::form_urlencoded::parse(v.as_bytes())
-//                     .into_owned()
-//                     .collect()
-//             })
-//             .unwrap_or_else(std::collections::HashMap::new)
-//     }
-// }
-
-async fn create(theme: &dyn Theme) -> Result<(), Box<dyn error::Error>> {
+async fn exchange_token(
+    app: App,
+    code: impl AsRef<str>,
+) -> Result<AccessTokenResponse, reqwest::Error> {
     let App {
         client_id,
         client_secret,
-    } = App::prompt(theme)?;
+    } = app;
+    Ok(Client::new()
+        .post("https://github.com/login/oauth/access_token")
+        .header("Accept", "application/json")
+        .form(&[
+            ("client_id", client_id.as_ref()),
+            ("client_secret", client_secret.as_ref()),
+            ("code", code.as_ref()),
+        ])
+        .send()
+        .await?
+        .json()
+        .await?)
+}
+
+async fn create(
+    port: u16,
+    alias: String,
+    theme: &dyn Theme,
+) -> Result<(), anyhow::Error> {
+    let app = App::prompt(theme, alias)?;
     let selections = Scope::into_enum_iter().collect::<Vec<_>>();
     let defaults = &[true, false]; // select common case (repo) scope by default
     let scopes = MultiSelect::with_theme(theme)
@@ -284,25 +240,23 @@ async fn create(theme: &dyn Theme) -> Result<(), Box<dyn error::Error>> {
             res
         });
     println!("🧭 Navigating to GitHub for authorization");
-    opener::open(format!("https://github.com/login/oauth/authorize?client_id={}&redirect_uri=http://localhost:4567/&scope={}", client_id.clone(), scopes.into_iter().map(|s| s.to_string()).collect::<Vec<_>>().join("%20")))?;
+    opener::open(authorization_url(app.client_id.as_str(), scopes, port))?;
 
     let (tx, mut rx) = broadcast::channel(1);
     // spin up a tiny http service to handle local redirection
     // of oauth access tokens
-    let server = hyper::Server::bind(&([127, 0, 0, 1], 4567).into()).serve(
-        hyper::service::make_service_fn(move |_| {
-            let client_id = client_id.clone();
-            let client_secret = client_secret.clone();
+    let server =
+        hyper::Server::bind(&([127, 0, 0, 1], port).into()).serve(make_service_fn(move |_| {
+            let app = app.clone();
             let tx = tx.clone();
             async {
-                Ok::<_, hyper::Error>(hyper::service::service_fn(move |req| {
-                    let client_id = client_id.clone();
-                    let client_secret = client_secret.clone();
+                Ok::<_, anyhow::Error>(service_fn(move |req| {
+                    let app = app.clone();
                     let tx = tx.clone();
                     async move {
                         match req.uri().path() {
                             // because browsers always request this
-                            "/favicon.ico" => Ok::<_, hyper::Error>(hyper::Response::default()),
+                            "/favicon.ico" => Ok::<_, anyhow::Error>(hyper::Response::default()),
                             _ => {
                                 println!("👍 Received response. You can close the browser tab now");
                                 let params = req
@@ -313,42 +267,40 @@ async fn create(theme: &dyn Theme) -> Result<(), Box<dyn error::Error>> {
                                             .into_owned()
                                             .collect()
                                     })
-                                    .unwrap_or_else(std::collections::HashMap::new);
+                                    .unwrap_or_else(HashMap::new);
+                                match params.get("code") {
+                                    Some(code) => {
+                                        let AccessTokenResponse { access_token } =
+                                            exchange_token(app, code).await?;
+                                        let mut clip: ClipboardContext = ClipboardProvider::new()
+                                            .expect("failed to get access to clipboard");
+                                        clip.set_contents(access_token)
+                                            .expect("failed to set clipboard contents");
 
-                                let AccessTokenResponse { access_token } = Client::new()
-                                    .post("https://github.com/login/oauth/access_token")
-                                    .header("Accept", "application/json")
-                                    .form(&[
-                                        ("client_id", client_id.clone()),
-                                        ("client_secret", client_secret.clone()),
-                                        ("code", params.get("code").unwrap().to_string()),
-                                    ])
-                                    .send()
-                                    .await
-                                    .unwrap()
-                                    .json()
-                                    .await
-                                    .unwrap();
-                                let mut clip: ClipboardContext = ClipboardProvider::new().unwrap();
-                                clip.set_contents(access_token).unwrap();
-
-                                println!("✨{}", "Token copied to clipboard".bold());
-                                tx.send(()).unwrap();
-                                Ok::<_, hyper::Error>(
-                                    hyper::Response::builder()
-                                        .status(hyper::StatusCode::OK)
-                                        .body(hyper::Body::from(
-                                            "Octopat says can close this browser tab",
-                                        ))
-                                        .unwrap(),
-                                )
+                                        println!("✨{}", "Token copied to clipboard".bold());
+                                        tx.send(()).unwrap(); // tokio error doesn't impl std error?
+                                        Ok::<_, anyhow::Error>(
+                                            hyper::Response::builder()
+                                                .status(hyper::StatusCode::OK)
+                                                .body(hyper::Body::from(
+                                                    "Octopat says can close this browser tab",
+                                                ))?,
+                                        )
+                                    }
+                                    _ => Ok::<_, anyhow::Error>(
+                                        hyper::Response::builder()
+                                            .status(hyper::StatusCode::OK)
+                                            .body(hyper::Body::from(
+                                            "Octopat thinks you might not have authorized access",
+                                        ))?,
+                                    ),
+                                }
                             }
                         }
                     }
                 }))
             }
-        }),
-    );
+        }));
 
     tokio::select! {
         _ = rx.recv() => {
@@ -360,34 +312,28 @@ async fn create(theme: &dyn Theme) -> Result<(), Box<dyn error::Error>> {
     Ok(())
 }
 
-async fn list(theme: &dyn Theme) -> Result<(), Box<dyn error::Error>> {
-    let credentials = Credentials::prompt(theme)?;
-    let res = request(
-        reqwest::Method::GET,
-        "https://api.github.com/authorizations",
-        credentials,
-    )?
-    .send()
-    .await?;
-    if !res.status().is_success() {
-        Err(StrErr(res.text().await?))?;
-    } else {
-        let authorizations: Vec<Authorization> = res.json().await?;
-        for auth in authorizations {
-            println!("{}", auth.to_string());
+#[tokio::main]
+async fn main() -> Result<(), anyhow::Error> {
+    match Opts::from_args() {
+        Opts::Create { port, alias } => {
+            create(
+                port.unwrap_or(4567),
+                alias.unwrap_or_else(|| "default".into()),
+                &ColorfulTheme::default(),
+            )
+            .await?
         }
     }
+
     Ok(())
 }
 
-#[tokio::main]
-async fn main() -> Result<(), Box<dyn error::Error>> {
-    let theme = ColorfulTheme::default();
-    match Opts::from_args() {
-        Opts::Create => create(&theme).await?,
-        Opts::List => list(&theme).await?,
-        _ => (),
-    }
+#[cfg(test)]
+mod tests {
+    use super::*;
 
-    Ok(())
+    #[test]
+    fn auth_url_returns_expected_url() {
+        assert_eq!(authorization_url("client_id", vec![Scope::AdminOrg, Scope::AdminRepoHook], 4567), "https://github.com/login/oauth/authorize?client_id=client_id&redirect_uri=http://localhost:4567/&scope=admin:org%20admin:repo_hook")
+    }
 }
