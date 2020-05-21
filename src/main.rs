@@ -92,19 +92,6 @@ pub enum Scope {
     Workflow,
 }
 
-impl fmt::Debug for Scope {
-    fn fmt(
-        &self,
-        f: &mut fmt::Formatter<'_>,
-    ) -> fmt::Result {
-        f.write_str(
-            serde_json::to_string(&self)
-                .expect("failed to serialize scope to a string")
-                .as_str(),
-        )
-    }
-}
-
 impl fmt::Display for Scope {
     fn fmt(
         &self,
@@ -128,18 +115,6 @@ struct AccessTokenResponse {
 struct App {
     client_id: String,
     client_secret: String,
-}
-
-impl fmt::Debug for App {
-    fn fmt(
-        &self,
-        f: &mut fmt::Formatter<'_>,
-    ) -> fmt::Result {
-        f.debug_struct("App")
-            .field("client_id", &self.client_id)
-            .field("client_secret", &"*".repeat(self.client_secret.len()))
-            .finish()
-    }
 }
 
 impl App {
