@@ -9,22 +9,19 @@ use hyper::service::{make_service_fn, service_fn};
 use keyring::Keyring;
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
-use std::{collections::HashMap, error, fmt};
+use std::{collections::HashMap, fmt};
 use structopt::StructOpt;
 use tokio::sync::broadcast;
 
 /// An interactive GitHub personal access token command line dispenser ✨
 #[derive(StructOpt)]
-pub enum Opts {
-    /// Create a new token
-    Create {
-        /// An optional port to listen for responses from GitHub on (defaults to 4567)
-        #[structopt(long, short)]
-        port: Option<u16>,
-        /// Alias for name of GitHub app to store on keychain (defaults to "default")
-        #[structopt(long, short)]
-        alias: Option<String>,
-    },
+pub struct Opts {
+    /// An optional port to listen for responses from GitHub on (defaults to 4567)
+    #[structopt(long, short)]
+    port: Option<u16>,
+    /// Alias for name of GitHub app to store on keychain (defaults to "default")
+    #[structopt(long, short)]
+    alias: Option<String>,
 }
 
 #[derive(Clone, Deserialize, Serialize, Copy, IntoEnumIterator)]
@@ -125,18 +122,6 @@ impl fmt::Display for Scope {
 #[derive(Deserialize)]
 struct AccessTokenResponse {
     access_token: String,
-}
-
-#[derive(Debug)]
-struct StrErr(String);
-impl error::Error for StrErr {}
-impl fmt::Display for StrErr {
-    fn fmt(
-        &self,
-        f: &mut fmt::Formatter<'_>,
-    ) -> fmt::Result {
-        f.write_str(self.0.as_str())
-    }
 }
 
 #[derive(Clone, Serialize, Deserialize)]
@@ -288,20 +273,22 @@ async fn create(
                                             hyper::Response::builder()
                                                 .status(hyper::StatusCode::OK)
                                                 .body(hyper::Body::from(
-                                                    format!(
-                                                        "<p>Octopat says you can close this browser tab</p><p>You can revoke this access at any time by visiting your <a href=\"https://github.com/settings/connections/applications/{client_id}\">application authorizations</a></p>",
-                                                        client_id = &app.client_id
-                                                    ),
+                                                    include_str!("../pages/success.html")
+                                                        .replace("{client_id}", &app.client_id),
                                                 ))?,
                                         )
                                     }
-                                    _ => Ok::<_, anyhow::Error>(
-                                        hyper::Response::builder()
-                                            .status(hyper::StatusCode::OK)
-                                            .body(hyper::Body::from(
-                                            "Octopat thinks you might not have authorized access",
-                                        ))?,
-                                    ),
+                                    _ => {
+                                        tx.send(()).unwrap();
+                                        Ok::<_, anyhow::Error>(
+                                            // tokio error doesn't impl std error?
+                                            hyper::Response::builder()
+                                                .status(hyper::StatusCode::OK)
+                                                .body(hyper::Body::from(include_str!(
+                                                    "../pages/error.html"
+                                                )))?,
+                                        )
+                                    }
                                 }
                             }
                         }
@@ -322,16 +309,13 @@ async fn create(
 
 #[tokio::main]
 async fn main() -> Result<(), anyhow::Error> {
-    match Opts::from_args() {
-        Opts::Create { port, alias } => {
-            create(
-                port.unwrap_or(4567),
-                alias.unwrap_or_else(|| "default".into()),
-                &ColorfulTheme::default(),
-            )
-            .await?
-        }
-    }
+    let Opts { port, alias } = Opts::from_args();
+    create(
+        port.unwrap_or(4567),
+        alias.unwrap_or_else(|| "default".into()),
+        &ColorfulTheme::default(),
+    )
+    .await?;
 
     Ok(())
 }
