@@ -1,5 +1,5 @@
 <h1 align="center">
-  :octocat: :key:
+  :octocat: 🔑
   <br/>
   octopat
 </h1>
