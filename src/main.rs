@@ -1,3 +1,4 @@
+//! GitHub personal access token dispenser
 use clipboard::{ClipboardContext, ClipboardProvider};
 use colored::Colorize;
 use dialoguer::{
@@ -187,6 +188,29 @@ async fn exchange_token(
         .await?)
 }
 
+trait Params {
+    fn query_params(&self) -> HashMap<String, String>;
+    fn query_param(
+        &self,
+        name: &str,
+    ) -> Option<String> {
+        self.query_params().get(name).map(String::clone)
+    }
+}
+
+impl<T> Params for hyper::Request<T> {
+    fn query_params(&self) -> HashMap<String, String> {
+        self.uri()
+            .query()
+            .map(|v| {
+                url::form_urlencoded::parse(v.as_bytes())
+                    .into_owned()
+                    .collect()
+            })
+            .unwrap_or_else(HashMap::new)
+    }
+}
+
 async fn create(
     port: u16,
     alias: String,
@@ -226,16 +250,7 @@ async fn create(
                             "/favicon.ico" => Ok::<_, anyhow::Error>(hyper::Response::default()),
                             _ => {
                                 println!("👍 Received response. You can close the browser tab now");
-                                let params = req
-                                    .uri()
-                                    .query()
-                                    .map(|v| {
-                                        url::form_urlencoded::parse(v.as_bytes())
-                                            .into_owned()
-                                            .collect()
-                                    })
-                                    .unwrap_or_else(HashMap::new);
-                                match params.get("code") {
+                                match req.query_param("code") {
                                     Some(code) => {
                                         let AccessTokenResponse { access_token } =
                                             exchange_token(&app, code).await?;
@@ -304,5 +319,40 @@ mod tests {
     #[test]
     fn auth_url_returns_expected_url() {
         assert_eq!(authorization_url("client_id", vec![Scope::AdminOrg, Scope::AdminRepoHook], 4567), "https://github.com/login/oauth/authorize?client_id=client_id&redirect_uri=http://localhost:4567/&scope=admin:org%20admin:repo_hook")
+    }
+
+    #[test]
+    fn scope_deserializes_into_identifier() -> Result<(), Box<dyn std::error::Error>> {
+        assert_eq!(
+            serde_json::to_string(&Scope::AdminGpgKey)?,
+            "\"admin:gpg_key\""
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn request_query_params() -> Result<(), Box<dyn std::error::Error>> {
+        let mut expect = HashMap::new();
+        expect.insert("baz".to_string(), "boom".to_string());
+        assert_eq!(
+            hyper::Request::builder()
+                .uri("https://foo.bar?baz=boom")
+                .body(())?
+                .query_params(),
+            expect
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn request_query_param() -> Result<(), Box<dyn std::error::Error>> {
+        assert_eq!(
+            hyper::Request::builder()
+                .uri("https://foo.bar?baz=boom")
+                .body(())?
+                .query_param("baz"),
+            Some("boom".into())
+        );
+        Ok(())
     }
 }
