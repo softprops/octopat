@@ -25,7 +25,7 @@ pub struct Opts {
     alias: Option<String>,
 }
 
-#[derive(Clone, Deserialize, Serialize, Copy, IntoEnumIterator)]
+#[derive(Clone, Deserialize, Serialize, Copy, IntoEnumIterator, PartialEq)]
 pub enum Scope {
     #[serde(rename = "repo")]
     Repo,
@@ -218,11 +218,15 @@ async fn create(
 ) -> Result<(), anyhow::Error> {
     let app = App::prompt(theme, alias)?;
     let selections = Scope::into_enum_iter().collect::<Vec<_>>();
-    let defaults = &[true, false]; // select common case (repo) scope by default
     let scopes = MultiSelect::with_theme(theme)
         .with_prompt("Select Permission scopes")
         .items(&selections[..])
-        .defaults(defaults)
+        .defaults(
+            &selections
+                .iter()
+                .map(|scope| *scope == Scope::Repo)
+                .collect::<Vec<_>>(),
+        )
         .paged(true)
         .interact()?
         .into_iter()
