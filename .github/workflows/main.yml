@@ -47,6 +47,9 @@ jobs:
         rust-version: ${{ matrix.rust }}
     - name: Checkout
       uses: actions/checkout@v2
+    - name: Install libdbus-1-dev
+      if: contains(matrix.os, 'ubuntu')
+      run: sudo apt-get install libdbus-1-dev
     - name: Test
       run: cargo test
 
