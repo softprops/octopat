@@ -263,7 +263,7 @@ async fn create(
                                         tx.send(()).unwrap(); // tokio error doesn't impl std error?
                                         Ok::<_, anyhow::Error>(
                                             hyper::Response::builder()
-                                                .status(hyper::StatusCode::OK)
+                                                .header("Content-Type", "text/html")
                                                 .body(hyper::Body::from(
                                                     include_str!("../pages/success.html")
                                                         .replace("{client_id}", &app.client_id),
@@ -275,7 +275,7 @@ async fn create(
                                         Ok::<_, anyhow::Error>(
                                             // tokio error doesn't impl std error?
                                             hyper::Response::builder()
-                                                .status(hyper::StatusCode::OK)
+                                                .header("Content-Type", "text/html")
                                                 .body(hyper::Body::from(include_str!(
                                                     "../pages/error.html"
                                                 )))?,
