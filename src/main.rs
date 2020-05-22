@@ -192,7 +192,7 @@ async fn create(
                                     Some(code) => {
                                         let AccessTokenResponse { access_token } =
                                             exchange_token(&app, code).await?;
-                                        let mut clip: ClipboardContext = ClipboardProvider::new()
+                                        let mut clip = ClipboardContext::new()
                                             .expect("failed to get access to clipboard");
                                         clip.set_contents(access_token)
                                             .expect("failed to set clipboard contents");
