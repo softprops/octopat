@@ -322,7 +322,10 @@ mod tests {
 
     #[test]
     fn auth_url_returns_expected_url() {
-        assert_eq!(authorization_url("client_id", vec![Scope::AdminOrg, Scope::AdminRepoHook], 4567), "https://github.com/login/oauth/authorize?client_id=client_id&redirect_uri=http://localhost:4567/&scope=admin:org%20admin:repo_hook")
+        assert_eq!(
+            authorization_url("client_id", vec![Scope::AdminOrg, Scope::AdminRepoHook], 4567),
+            "https://github.com/login/oauth/authorize?client_id=client_id&redirect_uri=http://localhost:4567/&scope=admin:org%20admin:repo_hook"
+        )
     }
 
     #[test]
