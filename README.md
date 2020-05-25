@@ -16,7 +16,11 @@
 
 <br />
 
-This CLI uses the [web application oauth flow](https://developer.github.com/apps/building-oauth-apps/authorizing-oauth-apps/#web-application-flow) to dispense personal access tokens. Historically this has also been possible through a separate authorizations API which is [now deprecated](https://developer.github.com/changes/2020-02-14-deprecating-oauth-auth-endpoint/).
+## Why
+
+I often find myself needing to [generate personal access tokens](https://help.github.com/en/github/authenticating-to-github/creating-a-personal-access-token-for-the-command-line#using-a-token-on-the-command-line) for GitHub integrations and API access. I'm often working from the command line. Pausing to navigate though GitHub settings pages interrupts my flow.
+
+Octopat is designed as a command line interface to work with my command line flow, not against it.
 
 ## How it works
 
@@ -41,5 +45,9 @@ At no point is secret information stored insecurely or printed out.
 ## Revoking tokens
 
 Since octopat is just an oauth application you can revoke tokens the [way you normal would](https://help.github.com/en/github/authenticating-to-github/reviewing-your-authorized-applications-oauth)
+
+## Why the oauth dance
+
+This CLI uses the [web application oauth flow](https://developer.github.com/apps/building-oauth-apps/authorizing-oauth-apps/#web-application-flow) to dispense personal access tokens. Historically this has also been possible through a separate authorizations API which is [now deprecated](https://developer.github.com/changes/2020-02-14-deprecating-oauth-auth-endpoint/).
 
 Doug Tangren (softprops) 2020
