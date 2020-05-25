@@ -6,7 +6,10 @@ use dialoguer::{
     Input, MultiSelect, Password,
 };
 use enum_iterator::IntoEnumIterator;
-use hyper::service::{make_service_fn, service_fn};
+use hyper::{
+    service::{make_service_fn, service_fn},
+    Body, Response, Server,
+};
 use keyring::Keyring;
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
@@ -147,10 +150,10 @@ async fn exchange_token(
         .await?)
 }
 
-fn html(content: impl Into<String>) -> anyhow::Result<hyper::Response<hyper::Body>> {
-    Ok(hyper::Response::builder()
+fn html(content: impl Into<String>) -> anyhow::Result<Response<Body>> {
+    Ok(Response::builder()
         .header("Content-Type", "text/html")
-        .body(hyper::Body::from(content.into()))?)
+        .body(Body::from(content.into()))?)
 }
 
 async fn create(
@@ -166,49 +169,48 @@ async fn create(
     let (tx, mut rx) = broadcast::channel(1);
     // spin up a tiny http service to handle local redirection
     // of oauth access tokens
-    let server =
-        hyper::Server::bind(&([127, 0, 0, 1], port).into()).serve(make_service_fn(move |_| {
-            let app = app.clone();
-            let tx = tx.clone();
-            async {
-                Ok::<_, anyhow::Error>(service_fn(move |req| {
-                    let app = app.clone();
-                    let tx = tx.clone();
-                    async move {
-                        match req.uri().path() {
-                            // because browsers always request this
-                            "/favicon.ico" => Ok::<_, anyhow::Error>(hyper::Response::default()),
-                            _ => {
-                                println!("👍 Received response. You can close the browser tab now");
-                                match req.query_param("code") {
-                                    Some(code) => {
-                                        let AccessTokenResponse { access_token } =
-                                            exchange_token(&app, code).await?;
-                                        let mut clip = ClipboardContext::new()
-                                            .expect("failed to get access to clipboard");
-                                        clip.set_contents(access_token)
-                                            .expect("failed to set clipboard contents");
+    let server = Server::bind(&([127, 0, 0, 1], port).into()).serve(make_service_fn(move |_| {
+        let app = app.clone();
+        let tx = tx.clone();
+        async {
+            Ok::<_, anyhow::Error>(service_fn(move |req| {
+                let app = app.clone();
+                let tx = tx.clone();
+                async move {
+                    match req.uri().path() {
+                        // because browsers always request this
+                        "/favicon.ico" => Ok::<_, anyhow::Error>(Response::default()),
+                        _ => {
+                            println!("👍 Received response. You can close the browser tab now");
+                            match req.query_param("code") {
+                                Some(code) => {
+                                    let AccessTokenResponse { access_token } =
+                                        exchange_token(&app, code).await?;
+                                    let mut clip = ClipboardContext::new()
+                                        .expect("failed to get access to clipboard");
+                                    clip.set_contents(access_token)
+                                        .expect("failed to set clipboard contents");
 
-                                        println!("✨{}", "Token copied to clipboard".bold());
-                                        tx.send(()).unwrap(); // tokio error doesn't impl std error?
-                                        Ok::<_, anyhow::Error>(html(
-                                            include_str!("../pages/success.html")
-                                                .replace("{client_id}", &app.client_id),
-                                        )?)
-                                    }
-                                    _ => {
-                                        tx.send(()).unwrap(); // tokio error doesn't impl std error?
-                                        Ok::<_, anyhow::Error>(html(include_str!(
-                                            "../pages/error.html"
-                                        ))?)
-                                    }
+                                    println!("✨{}", "Token copied to clipboard".bold());
+                                    tx.send(()).unwrap(); // tokio error doesn't impl std error?
+                                    Ok::<_, anyhow::Error>(html(
+                                        include_str!("../pages/success.html")
+                                            .replace("{client_id}", &app.client_id),
+                                    )?)
+                                }
+                                _ => {
+                                    tx.send(()).unwrap(); // tokio error doesn't impl std error?
+                                    Ok::<_, anyhow::Error>(html(include_str!(
+                                        "../pages/error.html"
+                                    ))?)
                                 }
                             }
                         }
                     }
-                }))
-            }
-        }));
+                }
+            }))
+        }
+    }));
 
     // whichever comes first
     tokio::select! {
@@ -222,7 +224,7 @@ async fn create(
 }
 
 #[tokio::main]
-async fn main() -> Result<(), anyhow::Error> {
+async fn main() -> anyhow::Result<()> {
     let Opts { port, alias } = Opts::from_args();
     create(
         port.unwrap_or(4567),
