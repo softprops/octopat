@@ -241,6 +241,16 @@ mod tests {
     use super::*;
 
     #[test]
+    fn html_responses_set_content_type() -> Result<(), Box<dyn std::error::Error>> {
+        let resp = html("<p>:)</p>")?;
+        assert_eq!(
+            resp.headers().get("Content-Type"),
+            Some(&hyper::header::HeaderValue::from_static("text/html"))
+        );
+        Ok(())
+    }
+
+    #[test]
     fn auth_url_returns_expected_url() {
         assert_eq!(
             authorization_url("client_id", vec![Scope::AdminOrg, Scope::AdminRepoHook], 4567),
