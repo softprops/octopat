@@ -41,6 +41,28 @@ impl fmt::Display for Scope {
     }
 }
 
+impl Scope {
+    fn prompt(theme: &dyn Theme) -> anyhow::Result<Vec<Scope>> {
+        let selections = Scope::into_enum_iter().collect::<Vec<_>>();
+        Ok(MultiSelect::with_theme(theme)
+            .with_prompt("Select Permission scopes")
+            .items(&selections[..])
+            .defaults(
+                &selections
+                    .iter()
+                    .map(|scope| *scope == Scope::Repo)
+                    .collect::<Vec<_>>(),
+            )
+            .paged(true)
+            .interact()?
+            .into_iter()
+            .fold(Vec::new(), |mut res, index| {
+                res.push(selections[index]);
+                res
+            }))
+    }
+}
+
 #[derive(Deserialize)]
 struct AccessTokenResponse {
     access_token: String,
@@ -67,10 +89,10 @@ impl App {
             _ => {
                 println!("We'll need some credentials from a GitHub app to fetch a new token");
                 println!("Visit https://github.com/settings/developers to find them or create a new application");
-                let client_id: String = Input::with_theme(theme)
+                let client_id = Input::with_theme(theme)
                     .with_prompt("Your client id")
                     .interact()?;
-                let client_secret: String = Password::with_theme(theme)
+                let client_secret = Password::with_theme(theme)
                     .with_prompt("Your client secret")
                     .interact()?;
                 let app = App {
@@ -149,25 +171,9 @@ async fn create(
     port: u16,
     alias: String,
     theme: &dyn Theme,
-) -> Result<(), anyhow::Error> {
+) -> anyhow::Result<()> {
     let app = App::prompt(theme, alias)?;
-    let selections = Scope::into_enum_iter().collect::<Vec<_>>();
-    let scopes = MultiSelect::with_theme(theme)
-        .with_prompt("Select Permission scopes")
-        .items(&selections[..])
-        .defaults(
-            &selections
-                .iter()
-                .map(|scope| *scope == Scope::Repo)
-                .collect::<Vec<_>>(),
-        )
-        .paged(true)
-        .interact()?
-        .into_iter()
-        .fold(Vec::new(), |mut res, index| {
-            res.push(selections[index]);
-            res
-        });
+    let scopes = Scope::prompt(theme)?;
     println!("🧭 Navigating to GitHub for authorization");
     opener::open(authorization_url(app.client_id.as_str(), scopes, port))?;
 
@@ -209,9 +215,8 @@ async fn create(
                                         )
                                     }
                                     _ => {
-                                        tx.send(()).unwrap();
+                                        tx.send(()).unwrap(); // tokio error doesn't impl std error?
                                         Ok::<_, anyhow::Error>(
-                                            // tokio error doesn't impl std error?
                                             hyper::Response::builder()
                                                 .header("Content-Type", "text/html")
                                                 .body(hyper::Body::from(include_str!(
@@ -227,6 +232,7 @@ async fn create(
             }
         }));
 
+    // whichever comes first
     tokio::select! {
         _ = rx.recv() => {
         }
