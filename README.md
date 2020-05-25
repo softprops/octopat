@@ -22,6 +22,32 @@ I often find myself needing to [generate personal access tokens](https://help.gi
 
 Octopat is designed as a command line interface to work with my command line flow, not against it.
 
+## Install
+
+### Homebrew (on osx)
+
+```sh
+$ brew install softprops/tools/octopat
+```
+
+If you want to upgrade to newer versions, use `brew upgrade`
+
+```sh
+$ brew upgrade softprops/tools/octopat
+```
+
+### GitHub Releases
+
+You can download and install install precompiled binaries from a [GitHub Releases](https://github.com/softprops/octopat/releases) page.
+
+You can programmatically install these using curl as well
+
+```sh
+$ cd $HOME/bin
+$ curl -L "https://github.com/softprops/octopat/releases/download/v0.0.1/octopat-$(uname -s)-$(uname -m).tar.gz" \
+  | tar -xz -C ~/bin
+```
+
 ## How it works
 
 In a nutshell, octopat is an embedded oauth application that copies access tokens to your clipboard.
