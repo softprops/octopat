@@ -1,7 +1,5 @@
 use std::{env, error::Error, fs, path::Path};
 
-//use std::ascii::AsciiExt;
-
 fn to_ident(scope: impl AsRef<str>) -> String {
     let mut buf = String::new();
     let mut capitalize = true;
