@@ -36,6 +36,12 @@ If you want to upgrade to newer versions, use `brew upgrade`. This will install 
 $ brew upgrade softprops/tools/octopat
 ```
 
+### Cargo install (rust users)
+
+```sh
+$ cargo install octopat
+```
+
 ### GitHub Releases
 
 You can download and install install precompiled binaries from a [GitHub Releases](https://github.com/softprops/octopat/releases) page.
@@ -47,8 +53,6 @@ $ cd $HOME/bin
 $ curl -L "https://github.com/softprops/octopat/releases/download/v0.0.1/octopat-$(uname -s)-$(uname -m).tar.gz" \
   | tar -xz -C ~/bin
 ```
-
-## 
 
 ## How it works
 
