@@ -72,7 +72,10 @@ At no point is secret information stored insecurely or printed out.
 
 ## Revoking tokens
 
-Since octopat is just an oauth application you can revoke tokens the [way you normal would](https://help.github.com/en/github/authenticating-to-github/reviewing-your-authorized-applications-oauth)
+Since octopat is just an oauth application you can revoke tokens the [way you normally  would](https://help.github.com/en/github/authenticating-to-github/reviewing-your-authorized-applications-oauth)
+
+There is a tradeoff with the oauth approach to generating tokens. You don't have an index for revoking one vs another. You can only revoke access given to a Github app. How do you overcome this tradeoff? You can make more than one GitHub app, one per category
+of application you are building. `octopat` accepts an `--alias` flag so that you can target a specific app when provisioning new tokens.
 
 ## Why the oauth dance
 
