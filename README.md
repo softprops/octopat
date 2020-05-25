@@ -14,6 +14,10 @@
 	</a>
 </div>
 
+<div align="center">
+  <img src="demo.png"/>
+</div>
+
 <br />
 
 ## Why
@@ -50,7 +54,7 @@ You can programmatically install these using curl as well
 
 ```sh
 $ cd $HOME/bin
-$ curl -L "https://github.com/softprops/octopat/releases/download/v0.0.1/octopat-$(uname -s)-$(uname -m).tar.gz" \
+$ curl -L "https://github.com/softprops/octopat/releases/download/v0.1.0/octopat-$(uname -s)-$(uname -m).tar.gz" \
   | tar -xz -C ~/bin
 ```
 
