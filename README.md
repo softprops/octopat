@@ -30,7 +30,7 @@ Octopat is designed as a command line interface to work with my command line flo
 $ brew install softprops/tools/octopat
 ```
 
-If you want to upgrade to newer versions, use `brew upgrade`
+If you want to upgrade to newer versions, use `brew upgrade`. This will install the latest version.
 
 ```sh
 $ brew upgrade softprops/tools/octopat
@@ -47,6 +47,8 @@ $ cd $HOME/bin
 $ curl -L "https://github.com/softprops/octopat/releases/download/v0.0.1/octopat-$(uname -s)-$(uname -m).tar.gz" \
   | tar -xz -C ~/bin
 ```
+
+## 
 
 ## How it works
 
