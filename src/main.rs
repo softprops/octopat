@@ -167,6 +167,12 @@ impl<T> Params for hyper::Request<T> {
     }
 }
 
+fn html(content: impl Into<String>) -> anyhow::Result<hyper::Response<hyper::Body>> {
+    Ok(hyper::Response::builder()
+        .header("Content-Type", "text/html")
+        .body(hyper::Body::from(content.into()))?)
+}
+
 async fn create(
     port: u16,
     alias: String,
@@ -205,24 +211,16 @@ async fn create(
 
                                         println!("✨{}", "Token copied to clipboard".bold());
                                         tx.send(()).unwrap(); // tokio error doesn't impl std error?
-                                        Ok::<_, anyhow::Error>(
-                                            hyper::Response::builder()
-                                                .header("Content-Type", "text/html")
-                                                .body(hyper::Body::from(
-                                                    include_str!("../pages/success.html")
-                                                        .replace("{client_id}", &app.client_id),
-                                                ))?,
-                                        )
+                                        Ok::<_, anyhow::Error>(html(
+                                            include_str!("../pages/success.html")
+                                                .replace("{client_id}", &app.client_id),
+                                        )?)
                                     }
                                     _ => {
                                         tx.send(()).unwrap(); // tokio error doesn't impl std error?
-                                        Ok::<_, anyhow::Error>(
-                                            hyper::Response::builder()
-                                                .header("Content-Type", "text/html")
-                                                .body(hyper::Body::from(include_str!(
-                                                    "../pages/error.html"
-                                                )))?,
-                                        )
+                                        Ok::<_, anyhow::Error>(html(include_str!(
+                                            "../pages/error.html"
+                                        ))?)
                                     }
                                 }
                             }
