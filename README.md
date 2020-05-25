@@ -28,3 +28,5 @@ then be taken to GitHub to authorize access (to your own GitHub app). GitHub wil
 your clipboard.
 
 At no point is secret information stored insecurely or printed out.
+
+Doug Tangren (softprops) 2019
