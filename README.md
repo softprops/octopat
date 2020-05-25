@@ -18,8 +18,6 @@
   <img src="demo.png"/>
 </div>
 
-<br />
-
 ## Why
 
 I often find myself needing to [generate personal access tokens](https://help.github.com/en/github/authenticating-to-github/creating-a-personal-access-token-for-the-command-line#using-a-token-on-the-command-line) for GitHub integrations and API access. I'm often working from the command line. Pausing to navigate though GitHub settings pages interrupts my flow.
